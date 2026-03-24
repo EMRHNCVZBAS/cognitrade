@@ -15,8 +15,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "CogniTrade - Kripto Analiz Platformu",
-  description: "Gelişmiş kripto para analiz ve alım satım stratejileri platformu",
+  title: "CogniTrade - Yatırım & Bütçe Takibi",
+  description: "BIST hisseleri, kripto paralar ve yatırım fonlarını tek ekranda takip edin. Gelir ve giderlerinizi yönetin.",
 };
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="tr" suppressHydrationWarning>
-      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-slate-900 text-white`}>
+      <body className={`${geistSans.variable} ${geistMono.variable} antialiased bg-gray-950 text-white`}>
         {children}
       </body>
     </html>

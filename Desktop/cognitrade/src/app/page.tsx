@@ -1,618 +1,504 @@
-'use client';
+'use client'
 
-import Link from 'next/link';
-import { useEffect, useState, useRef } from 'react';
+import { useState, useEffect } from 'react'
 
-// Nokta/yıldız efekti için ayrı bir bileşen oluşturalım
-const BackgroundDots = () => {
-  // TypeScript için interface tanımlayalım
-  interface Dot {
-    id: number;
-    left: string;
-    top: string;
-    animationDuration: string;
-  }
-  
-  const [dots, setDots] = useState<Dot[]>([]);
-  
-  useEffect(() => {
-    // Sadece istemci tarafında çalışacak
-    const newDots = Array.from({ length: 20 }).map((_, i) => ({
-      id: i,
-      left: `${Math.random() * 100}%`,
-      top: `${Math.random() * 100}%`,
-      animationDuration: `${3 + Math.random() * 3}s`
-    }));
-    
-    setDots(newDots);
-  }, []);
-  
+// ─── Types ───────────────────────────────────────────────────────────────────
+
+type MarketTab = 'bist' | 'kripto' | 'fon'
+type TransactionType = 'gelir' | 'gider'
+
+interface Asset {
+  symbol: string
+  name: string
+  price: number
+  change: number
+  changePercent: number
+  quantity: number
+  type: MarketTab
+  currency: string
+}
+
+interface Transaction {
+  id: string
+  type: TransactionType
+  category: string
+  amount: number
+  description: string
+  date: string
+}
+
+// ─── Mock Data ────────────────────────────────────────────────────────────────
+
+const initialAssets: Asset[] = [
+  // BIST Hisseleri
+  { symbol: 'THYAO', name: 'Türk Hava Yolları', price: 328.50, change: 8.20, changePercent: 2.56, quantity: 100, type: 'bist', currency: '₺' },
+  { symbol: 'BIMAS', name: 'BIM Birleşik Mağazalar', price: 445.75, change: -5.25, changePercent: -1.16, quantity: 50, type: 'bist', currency: '₺' },
+  { symbol: 'EREGL', name: 'Ereğli Demir Çelik', price: 52.80, change: 1.40, changePercent: 2.72, quantity: 200, type: 'bist', currency: '₺' },
+  { symbol: 'ASELS', name: 'Aselsan', price: 87.30, change: -2.10, changePercent: -2.35, quantity: 75, type: 'bist', currency: '₺' },
+  { symbol: 'SASA', name: 'SASA Polyester', price: 98.45, change: 3.65, changePercent: 3.85, quantity: 150, type: 'bist', currency: '₺' },
+  { symbol: 'AKBNK', name: 'Akbank', price: 67.20, change: 0.80, changePercent: 1.20, quantity: 300, type: 'bist', currency: '₺' },
+  { symbol: 'GARAN', name: 'Garanti BBVA', price: 89.50, change: -1.50, changePercent: -1.65, quantity: 200, type: 'bist', currency: '₺' },
+  { symbol: 'KCHOL', name: 'Koç Holding', price: 212.40, change: 4.40, changePercent: 2.12, quantity: 60, type: 'bist', currency: '₺' },
+  // Kripto Paralar
+  { symbol: 'BTC', name: 'Bitcoin', price: 67842.50, change: 1245.30, changePercent: 1.87, quantity: 0.5, type: 'kripto', currency: '$' },
+  { symbol: 'ETH', name: 'Ethereum', price: 3542.80, change: -87.20, changePercent: -2.40, quantity: 2.5, type: 'kripto', currency: '$' },
+  { symbol: 'BNB', name: 'Binance Coin', price: 587.40, change: 12.60, changePercent: 2.19, quantity: 10, type: 'kripto', currency: '$' },
+  { symbol: 'SOL', name: 'Solana', price: 178.90, change: 5.30, changePercent: 3.05, quantity: 25, type: 'kripto', currency: '$' },
+  { symbol: 'AVAX', name: 'Avalanche', price: 42.75, change: -1.25, changePercent: -2.84, quantity: 50, type: 'kripto', currency: '$' },
+  { symbol: 'XRP', name: 'Ripple', price: 0.685, change: 0.025, changePercent: 3.79, quantity: 5000, type: 'kripto', currency: '$' },
+  // Yatırım Fonları
+  { symbol: 'AGF', name: 'Ata Gayrimenkul Fonu', price: 1.2456, change: 0.0234, changePercent: 1.92, quantity: 10000, type: 'fon', currency: '₺' },
+  { symbol: 'AKT', name: 'Ak Portföy Hisse Fonu', price: 2.3789, change: -0.0145, changePercent: -0.61, quantity: 5000, type: 'fon', currency: '₺' },
+  { symbol: 'GBF', name: 'Garanti Borçlanma Fonu', price: 3.1234, change: 0.0567, changePercent: 1.85, quantity: 3000, type: 'fon', currency: '₺' },
+  { symbol: 'YBF', name: 'Yapı Kredi Dengeli Fonu', price: 1.8923, change: 0.0234, changePercent: 1.25, quantity: 8000, type: 'fon', currency: '₺' },
+  { symbol: 'TFF', name: 'TF Varlık Kiralama Fonu', price: 1.0567, change: -0.0023, changePercent: -0.22, quantity: 15000, type: 'fon', currency: '₺' },
+]
+
+const INCOME_CATEGORIES = ['Maaş', 'Freelance', 'Kira Geliri', 'Temettü', 'Faiz', 'Diğer']
+const EXPENSE_CATEGORIES = ['Market', 'Fatura', 'Ulaşım', 'Sağlık', 'Eğlence', 'Yatırım', 'Diğer']
+const USD_TRY = 32.5
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+function fmt(n: number, d = 2): string {
+  return n.toLocaleString('tr-TR', { minimumFractionDigits: d, maximumFractionDigits: d })
+}
+
+// ─── Sparkline ───────────────────────────────────────────────────────────────
+
+function Sparkline({ positive }: { positive: boolean }) {
+  const pts = positive
+    ? '0,20 5,15 10,18 15,10 20,12 25,5 30,8 35,3 40,6 45,2'
+    : '0,3 5,8 10,5 15,12 20,10 25,15 30,12 35,18 40,15 45,20'
   return (
-    <>
-      {dots.map(dot => (
-        <div 
-          key={dot.id}
-          className="absolute w-1 h-1 bg-emerald-400 rounded-full opacity-30"
-          style={{
-            left: dot.left,
-            top: dot.top,
-            animation: `pulse ${dot.animationDuration} infinite`
-          }}
-        ></div>
-      ))}
-    </>
-  );
-};
+    <svg width="46" height="22" viewBox="0 0 46 22" className="opacity-70">
+      <polyline
+        points={pts}
+        fill="none"
+        stroke={positive ? '#10b981' : '#ef4444'}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  )
+}
 
-export default function Home() {
-  const [scrollY, setScrollY] = useState(0);
-  const [scrollDirection, setScrollDirection] = useState("none");
-  const lastScrollY = useRef(0);
-  const [isBrowser, setIsBrowser] = useState(false);
+// ─── Summary Card ─────────────────────────────────────────────────────────────
 
+function SummaryCard({
+  title, value, sub, colorClass, icon,
+}: {
+  title: string; value: string; sub: string; colorClass: string; icon: string
+}) {
+  return (
+    <div className={`rounded-xl p-4 border ${colorClass}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs text-gray-400">{title}</span>
+        <span className="text-lg">{icon}</span>
+      </div>
+      <div className="text-lg font-bold text-white">{value}</div>
+      <div className="text-xs text-gray-500 mt-1">{sub}</div>
+    </div>
+  )
+}
+
+// ─── Main Dashboard ───────────────────────────────────────────────────────────
+
+export default function Dashboard() {
+  const [assets, setAssets] = useState<Asset[]>(initialAssets)
+  const [activeTab, setActiveTab] = useState<MarketTab>('bist')
+  const [transactions, setTransactions] = useState<Transaction[]>([
+    { id: '1', type: 'gelir', category: 'Maaş', amount: 15000, description: 'Mart Maaşı', date: '2026-03-01' },
+    { id: '2', type: 'gider', category: 'Market', amount: 2500, description: 'Aylık Market', date: '2026-03-05' },
+    { id: '3', type: 'gelir', category: 'Temettü', amount: 3200, description: 'THYAO Temettü', date: '2026-03-10' },
+    { id: '4', type: 'gider', category: 'Fatura', amount: 850, description: 'Elektrik/Su/Gaz', date: '2026-03-12' },
+    { id: '5', type: 'gider', category: 'Ulaşım', amount: 600, description: 'Akaryakıt', date: '2026-03-15' },
+    { id: '6', type: 'gelir', category: 'Faiz', amount: 1800, description: 'Mevduat Faizi', date: '2026-03-20' },
+  ])
+
+  const [form, setForm] = useState({
+    type: 'gelir' as TransactionType,
+    category: 'Maaş',
+    amount: '',
+    description: '',
+    date: new Date().toISOString().split('T')[0],
+  })
+  const [showForm, setShowForm] = useState(false)
+  const [lastUpdated, setLastUpdated] = useState(new Date())
+
+  // ── Simulated live price updates ──────────────────────────────────────────
   useEffect(() => {
-    // İstemci tarafında olduğumuzu belirtiyoruz
-    setIsBrowser(true);
-    
-    const handleScroll = () => {
-      const currentScrollY = window.scrollY;
-      
-      // Detect scroll direction
-      if (currentScrollY > lastScrollY.current) {
-        setScrollDirection("down");
-      } else if (currentScrollY < lastScrollY.current) {
-        setScrollDirection("up");
-      }
-      
-      lastScrollY.current = currentScrollY;
-      setScrollY(currentScrollY);
-      
-      // Add animation to sections as they come into view
-      const sections = document.querySelectorAll('section');
-      sections.forEach(section => {
-        const sectionTop = section.getBoundingClientRect().top;
-        const sectionBottom = section.getBoundingClientRect().bottom;
-        
-        // Element is in viewport
-        if (sectionTop < window.innerHeight * 0.85 && sectionBottom > 0) {
-          section.classList.add('in-view');
-          section.classList.add(scrollDirection === "down" ? 'scroll-down' : 'scroll-up');
-        } else {
-          section.classList.remove('in-view');
-        }
-      });
-      
-      // Apply parallax effect to background elements
-      document.querySelectorAll('.parallax').forEach(element => {
-        const speed = parseFloat(element.getAttribute('data-speed') || '0.5');
-        const yPos = -(currentScrollY * speed);
-        if (element instanceof HTMLElement) {
-          element.style.transform = `translateY(${yPos}px)`;
-        }
-      });
-    };
-    
-    // Add scroll event listener sadece istemci tarafında
-    if (isBrowser) {
-      window.addEventListener('scroll', handleScroll);
-      
-      // Initial check for sections in view
-      setTimeout(() => {
-        handleScroll();
-      }, 100);
+    const interval = setInterval(() => {
+      setAssets(prev =>
+        prev.map(asset => {
+          const vol = asset.type === 'kripto' ? 0.003 : asset.type === 'bist' ? 0.002 : 0.001
+          const delta = asset.price * (Math.random() * vol * 2 - vol)
+          const newPrice = Math.max(asset.price + delta, 0.001)
+          const newChange = asset.change + delta
+          const base = newPrice - newChange
+          const newPct = base > 0 ? (newChange / base) * 100 : 0
+          return { ...asset, price: newPrice, change: newChange, changePercent: newPct }
+        })
+      )
+      setLastUpdated(new Date())
+    }, 3000)
+    return () => clearInterval(interval)
+  }, [])
+
+  // ── Derived values ────────────────────────────────────────────────────────
+  const toTRY = (a: Asset) =>
+    a.currency === '$' ? a.price * a.quantity * USD_TRY : a.price * a.quantity
+
+  const bistValue   = assets.filter(a => a.type === 'bist').reduce((s, a) => s + toTRY(a), 0)
+  const cryptoValue = assets.filter(a => a.type === 'kripto').reduce((s, a) => s + toTRY(a), 0)
+  const fonValue    = assets.filter(a => a.type === 'fon').reduce((s, a) => s + toTRY(a), 0)
+  const portfolioValue = bistValue + cryptoValue + fonValue
+
+  const totalIncome  = transactions.filter(t => t.type === 'gelir').reduce((s, t) => s + t.amount, 0)
+  const totalExpense = transactions.filter(t => t.type === 'gider').reduce((s, t) => s + t.amount, 0)
+  const netBalance   = totalIncome - totalExpense
+
+  const filteredAssets = assets.filter(a => a.type === activeTab)
+
+  // ── Add transaction ───────────────────────────────────────────────────────
+  function addTransaction() {
+    if (!form.amount || !form.description) return
+    const t: Transaction = {
+      id: Date.now().toString(),
+      type: form.type,
+      category: form.category,
+      amount: parseFloat(form.amount),
+      description: form.description,
+      date: form.date,
     }
-    
-    // Remove event listener on cleanup
-    return () => {
-      if (isBrowser) {
-        window.removeEventListener('scroll', handleScroll);
-      }
-    };
-  }, [scrollDirection, isBrowser]);
+    setTransactions(prev => [t, ...prev])
+    setForm({ type: 'gelir', category: 'Maaş', amount: '', description: '', date: new Date().toISOString().split('T')[0] })
+    setShowForm(false)
+  }
 
+  // ── Render ────────────────────────────────────────────────────────────────
   return (
-    <main className="min-h-screen bg-black text-white overflow-x-hidden">
-      {/* Header/Navigation */}
-      <header className="fixed w-full z-50 bg-black/80 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-20">
-            <div className="flex-shrink-0 flex items-center">
-              <Link href="/" className="text-2xl font-bold text-white">
-                <span className="text-emerald-400">COGNI</span>TRADE
-              </Link>
-            </div>
-            <nav className="hidden md:flex space-x-8">
-              <a href="#features" className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium">
-                Features
-              </a>
-              <a href="#benefits" className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium">
-                Benefits
-              </a>
-              <a href="#testimonials" className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium">
-                Testimonials
-              </a>
-              <Link href="/login" className="text-gray-300 hover:text-white px-3 py-2 text-sm font-medium">
-                Login
-              </Link>
-              <Link 
-                href="/signup" 
-                className="bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-md text-sm font-medium transition"
-              >
-                Get Started
-              </Link>
-            </nav>
-            <div className="md:hidden">
-              <button className="text-gray-400 hover:text-white">
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="h-6 w-6">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              </button>
-            </div>
+    <div className="min-h-screen bg-gray-950 text-white" style={{ fontFamily: 'var(--font-geist-sans, system-ui, sans-serif)' }}>
+
+      {/* ── Header ── */}
+      <header className="bg-gray-900 border-b border-gray-800 px-4 py-3 flex items-center justify-between sticky top-0 z-50">
+        <div className="flex items-center gap-3">
+          <span className="text-xl font-bold">
+            <span className="text-emerald-400">COGNI</span>TRADE
+          </span>
+          <span className="text-gray-600 text-xs hidden sm:block">Yatırım &amp; Bütçe Takibi</span>
+        </div>
+        <div className="flex items-center gap-4 text-sm text-gray-400">
+          <span className="hidden md:block text-xs">
+            Güncellendi: {lastUpdated.toLocaleTimeString('tr-TR')}
+          </span>
+          <div className="flex items-center gap-1.5">
+            <div className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+            <span className="text-emerald-400 text-xs font-medium">Canlı</span>
           </div>
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section 
-        id="hero" 
-        className={`flex flex-col justify-center items-center relative overflow-hidden transition-all duration-700 ${
-          isBrowser && scrollY > 100 ? 'min-h-0 py-20' : 'min-h-screen'
-        }`}
-      >
-        {/* Background grid effect with parallax */}
-        <div className="absolute inset-0 grid-background opacity-10 parallax" data-speed="0.2"></div>
-        
-        {/* Background dots/stars effect */}
-        <div className="absolute inset-0 parallax" data-speed="0.3">
-          {isBrowser && <BackgroundDots />}
+      <div className="max-w-screen-2xl mx-auto p-3 md:p-4">
+
+        {/* ── Summary Cards ── */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+          <SummaryCard
+            title="Toplam Portföy"
+            value={`₺${fmt(portfolioValue)}`}
+            sub="Tüm yatırımlar"
+            colorClass="bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+            icon="📈"
+          />
+          <SummaryCard
+            title="BIST Değeri"
+            value={`₺${fmt(bistValue)}`}
+            sub={`${assets.filter(a => a.type === 'bist').length} hisse`}
+            colorClass="bg-cyan-500/10 border-cyan-500/20 text-cyan-400"
+            icon="🏛️"
+          />
+          <SummaryCard
+            title="Kripto Değeri"
+            value={`₺${fmt(cryptoValue)}`}
+            sub={`$1 = ₺${USD_TRY}`}
+            colorClass="bg-orange-500/10 border-orange-500/20 text-orange-400"
+            icon="₿"
+          />
+          <SummaryCard
+            title="Fon Değeri"
+            value={`₺${fmt(fonValue)}`}
+            sub={`${assets.filter(a => a.type === 'fon').length} fon`}
+            colorClass="bg-purple-500/10 border-purple-500/20 text-purple-400"
+            icon="📊"
+          />
         </div>
 
-        <div className={`relative z-10 text-center px-4 sm:px-6 lg:px-8 max-w-5xl mx-auto transition-all duration-700 ${
-          isBrowser && scrollY > 100 ? 'transform scale-90 opacity-90' : 'transform scale-100 opacity-100'
-        }`}>
-          <h1 className="text-5xl md:text-7xl font-bold mb-8 tracking-tight">
-            <span className="block text-emerald-400 mb-2 animate-text-slide">Trade Smarter</span>
-            <span className="block animate-text-slide" style={{animationDelay: '0.2s'}}>with CogniTrade</span>
-          </h1>
-          
-          <p className="text-xl text-gray-400 mb-12 max-w-3xl mx-auto animate-text-slide" style={{animationDelay: '0.4s'}}>
-            Empower your trades with CogniTrade, blending sentiment analysis and live market data for razor-sharp decisions.
-          </p>
-          
-          <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-6 animate-text-slide" style={{animationDelay: '0.6s'}}>
-            <Link 
-              href="/signup" 
-              className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-md font-medium text-lg transition-colors duration-200"
-            >
-              Try for Free
-            </Link>
-            <Link 
-              href="/demo" 
-              className="bg-gray-800 hover:bg-gray-700 text-white border border-gray-600 px-8 py-4 rounded-md font-medium text-lg flex items-center justify-center space-x-2 transition-colors duration-200"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="h-5 w-5">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Watch Demo</span>
-            </Link>
-          </div>
-          
+        {/* ── Main Grid ── */}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
 
-        </div>
+          {/* ── Market Panel (2/3) ── */}
+          <div className="xl:col-span-2 bg-gray-900 rounded-xl border border-gray-800 overflow-hidden flex flex-col">
 
-        {/* Scroll indicator */}
-        <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="h-6 w-6 text-gray-500">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-          </svg>
-        </div>
-      </section>
-
-      {/* Features Title */}
-      <section id="features" className="py-20 px-4 bg-gradient-to-b from-black to-gray-900 animate-on-scroll">
-        <div className="max-w-7xl mx-auto text-center">
-          <h2 className="text-3xl md:text-4xl font-bold mb-6">
-            <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-blue-500">
-              The Future of Trading is Shaped by CogniTrade
-            </span>
-          </h2>
-          <p className="text-xl text-gray-400 max-w-3xl mx-auto mb-16">
-            Take your trading experience to the next level with AI-powered analysis, real-time market data, 
-            and advanced technical indicators.
-          </p>
-          
-          <div className="mb-16 inline-block relative">
-            <h3 className="text-2xl font-bold inline-block relative">
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-blue-500">
-                Powerful Features with Smart Trading
-              </span>
-            </h3>
-            <div className="absolute bottom-0 left-1/2 transform -translate-x-1/2 w-32 h-1 bg-gradient-to-r from-emerald-400 to-blue-500 rounded-full mt-2"></div>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-            {/* AI Power */}
-            <div className="rounded-2xl bg-gradient-to-b from-gray-800 to-gray-900 p-8 shadow-xl hover:shadow-emerald-500/10 transition-all border border-gray-800 hover:border-emerald-500/30 group">
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center mb-6 shadow-lg group-hover:shadow-emerald-400/20 transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-              <h3 className="text-2xl font-bold mb-4 text-white group-hover:text-emerald-400 transition-colors">AI Power</h3>
-              <p className="text-gray-400 mb-6">
-                Our FinBERT-based sentiment analysis engine analyzes news and social media trends in real-time. 
-                With 89% accuracy, it helps you predict market direction in advance.
-              </p>
-              <ul className="space-y-3 text-gray-400">
-                <li className="flex items-center">
-                  <div className="bg-emerald-500/20 rounded-full p-1 mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  Real-time news analysis
-                </li>
-
-                <li className="flex items-center">
-                  <div className="bg-emerald-500/20 rounded-full p-1 mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  Market direction predictions
-                </li>
-              </ul>
+            {/* Tabs */}
+            <div className="flex border-b border-gray-800 shrink-0">
+              {(['bist', 'kripto', 'fon'] as MarketTab[]).map(tab => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 py-3 text-sm font-semibold transition-colors ${
+                    activeTab === tab
+                      ? 'bg-gray-800 text-white border-b-2 border-emerald-400'
+                      : 'text-gray-500 hover:text-gray-300 hover:bg-gray-800/40'
+                  }`}
+                >
+                  {tab === 'bist' ? 'BIST' : tab === 'kripto' ? 'Kripto' : 'Fon'}
+                </button>
+              ))}
             </div>
 
-            {/* Advanced Technical Analysis */}
-            <div className="rounded-2xl bg-gradient-to-b from-gray-800 to-gray-900 p-8 shadow-xl hover:shadow-blue-500/10 transition-all border border-gray-800 hover:border-blue-500/30 group">
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-blue-400 to-indigo-500 flex items-center justify-center mb-6 shadow-lg group-hover:shadow-blue-400/20 transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 12l3-3 3 3 4-4M8 21l4-4 4 4M3 4h18M4 4h16v12a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" />
-                </svg>
-              </div>
-              <h3 className="text-2xl font-bold mb-4 text-white group-hover:text-blue-400 transition-colors">Advanced Technical Analysis</h3>
-              <p className="text-gray-400 mb-6">
-                Optimize your trading strategies with real-time price data through CoinMarketCap API integration, 
-                customizable technical indicators, and professional charting tools.
-              </p>
-              <ul className="space-y-3 text-gray-400">
-                <li className="flex items-center">
-                  <div className="bg-blue-500/20 rounded-full p-1 mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  Multiple timeframe analysis
-                </li>
-                <li className="flex items-center">
-                  <div className="bg-blue-500/20 rounded-full p-1 mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  40+ technical indicators
-                </li>
-
-              </ul>
+            {/* Table */}
+            <div className="overflow-x-auto flex-1">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-gray-500 text-xs border-b border-gray-800">
+                    <th className="text-left py-2.5 px-4 font-medium">Sembol / İsim</th>
+                    <th className="text-right py-2.5 px-3 font-medium">Fiyat</th>
+                    <th className="text-right py-2.5 px-3 font-medium">Değişim</th>
+                    <th className="text-right py-2.5 px-3 font-medium hidden md:table-cell">Miktar</th>
+                    <th className="text-right py-2.5 px-3 font-medium hidden md:table-cell">Değer (₺)</th>
+                    <th className="text-right py-2.5 px-3 font-medium hidden lg:table-cell">Grafik</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredAssets.map(asset => {
+                    const pos = asset.changePercent >= 0
+                    const value = toTRY(asset)
+                    const priceDecimals = asset.price < 10 ? 4 : 2
+                    return (
+                      <tr
+                        key={asset.symbol}
+                        className="border-b border-gray-800/50 hover:bg-gray-800/40 transition-colors"
+                      >
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-white">{asset.symbol}</div>
+                          <div className="text-gray-500 text-xs truncate max-w-[160px]">{asset.name}</div>
+                        </td>
+                        <td className="py-3 px-3 text-right font-mono">
+                          <span className="text-white">
+                            {asset.currency}{fmt(asset.price, priceDecimals)}
+                          </span>
+                        </td>
+                        <td className="py-3 px-3 text-right">
+                          <span className={`font-semibold text-sm ${pos ? 'text-emerald-400' : 'text-red-400'}`}>
+                            {pos ? '+' : ''}{fmt(asset.changePercent, 2)}%
+                          </span>
+                          <div className={`text-xs ${pos ? 'text-emerald-600' : 'text-red-600'}`}>
+                            {pos ? '+' : ''}{asset.currency}{fmt(Math.abs(asset.change), priceDecimals)}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3 text-right text-gray-400 hidden md:table-cell font-mono">
+                          {fmt(asset.quantity, asset.quantity < 10 ? 3 : 0)}
+                        </td>
+                        <td className="py-3 px-3 text-right hidden md:table-cell">
+                          <span className="text-white font-medium">₺{fmt(value)}</span>
+                        </td>
+                        <td className="py-3 px-3 text-right hidden lg:table-cell">
+                          <Sparkline positive={pos} />
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
             </div>
 
-            {/* Smart Portfolio Management */}
-            <div className="rounded-2xl bg-gradient-to-b from-gray-800 to-gray-900 p-8 shadow-xl hover:shadow-purple-500/10 transition-all border border-gray-800 hover:border-purple-500/30 group">
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-purple-400 to-pink-500 flex items-center justify-center mb-6 shadow-lg group-hover:shadow-purple-400/20 transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-                </svg>
+            {/* Portfolio breakdown bar */}
+            <div className="p-3 border-t border-gray-800 shrink-0">
+              <div className="text-xs text-gray-500 mb-2">Portföy Dağılımı</div>
+              <div className="flex h-2 rounded-full overflow-hidden gap-0.5">
+                <div
+                  className="bg-cyan-500 transition-all duration-700"
+                  style={{ width: `${(bistValue / portfolioValue) * 100}%` }}
+                  title={`BIST: ₺${fmt(bistValue)}`}
+                />
+                <div
+                  className="bg-orange-500 transition-all duration-700"
+                  style={{ width: `${(cryptoValue / portfolioValue) * 100}%` }}
+                  title={`Kripto: ₺${fmt(cryptoValue)}`}
+                />
+                <div
+                  className="bg-purple-500 transition-all duration-700"
+                  style={{ width: `${(fonValue / portfolioValue) * 100}%` }}
+                  title={`Fon: ₺${fmt(fonValue)}`}
+                />
               </div>
-              <h3 className="text-2xl font-bold mb-4 text-white group-hover:text-purple-400 transition-colors">Smart Portfolio Management</h3>
-              <p className="text-gray-400 mb-6">
-                Secure your investments with risk management tools, automatic stop-loss suggestions, 
-                and portfolio diversification recommendations.
-              </p>
-              <ul className="space-y-3 text-gray-400">
-                <li className="flex items-center">
-                  <div className="bg-purple-500/20 rounded-full p-1 mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  Dynamic portfolio balancing
-                </li>
-
-
-              </ul>
-            </div>
-
-            {/* 24/7 Support and Education */}
-            <div className="rounded-2xl bg-gradient-to-b from-gray-800 to-gray-900 p-8 shadow-xl hover:shadow-amber-500/10 transition-all border border-gray-800 hover:border-amber-500/30 group">
-              <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center mb-6 shadow-lg group-hover:shadow-amber-400/20 transition-all">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-8 w-8 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                </svg>
+              <div className="flex gap-4 mt-2 text-xs text-gray-500">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-cyan-500 inline-block" />BIST {((bistValue / portfolioValue) * 100).toFixed(1)}%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-orange-500 inline-block" />Kripto {((cryptoValue / portfolioValue) * 100).toFixed(1)}%</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500 inline-block" />Fon {((fonValue / portfolioValue) * 100).toFixed(1)}%</span>
               </div>
-              <h3 className="text-2xl font-bold mb-4 text-white group-hover:text-amber-400 transition-colors">24/7 Support and Education</h3>
-              <p className="text-gray-400 mb-6">
-                We&apos;re here to support your trading journey with comprehensive educational materials, 
-                webinars, and professional support team.
-              </p>
-              <ul className="space-y-3 text-gray-400">
-
-                <li className="flex items-center">
-                  <div className="bg-amber-500/20 rounded-full p-1 mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  Trading strategy guides
-                </li>
-                <li className="flex items-center">
-                  <div className="bg-amber-500/20 rounded-full p-1 mr-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 text-amber-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </div>
-                  Responsive customer service
-                </li>
-              </ul>
             </div>
           </div>
-        </div>
-      </section>
-      
-      {/* Benefits Section */}
-      <section id="benefits" className="py-20 px-4 bg-black animate-on-scroll">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-6">
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-blue-500">
-                Why Choose CogniTrade?
-              </span>
-            </h2>
-            <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-              The sharp distinctions that set us apart from other platforms.
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-6 bg-gray-900/50 rounded-xl border border-gray-800 hover:border-emerald-500/30 transition-all">
-              <div className="w-12 h-12 rounded-lg bg-emerald-500/20 flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Unified Analysis</h3>
-              <p className="text-gray-400">
-                The only platform that combines technical and fundamental analysis for comprehensive market insights.
-              </p>
-            </div>
-            
-            <div className="p-6 bg-gray-900/50 rounded-xl border border-gray-800 hover:border-emerald-500/30 transition-all">
-              <div className="w-12 h-12 rounded-lg bg-blue-500/20 flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-2">AI-Powered News Analysis</h3>
-              <p className="text-gray-400">
-                Scoring news from 0-100 using our AI system for easy understanding and clear investment decisions.
-              </p>
-            </div>
-            
-            <div className="p-6 bg-gray-900/50 rounded-xl border border-gray-800 hover:border-emerald-500/30 transition-all">
-              <div className="w-12 h-12 rounded-lg bg-purple-500/20 flex items-center justify-center mb-4">
-                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-              <h3 className="text-xl font-semibold text-white mb-2">Time Efficiency</h3>
-              <p className="text-gray-400">
-                No need to spend hours on news sources, you can access all news with a single click on our platform.
-              </p>
-            </div>
-          </div>
-        </div>
-      </section>
 
-      {/* Testimonials Section */}
-      <section id="testimonials" className="py-20 px-4 bg-gradient-to-b from-black to-gray-900 animate-on-scroll">
-        <div className="max-w-7xl mx-auto">
-          <div className="text-center mb-16">
-            <h2 className="text-3xl font-bold mb-6">
-              <span className="bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-blue-500">
-                Why Choose CogniTrade?
-              </span>
-            </h2>
-            <p className="text-xl text-gray-400 max-w-3xl mx-auto">
-              The sharp distinctions that set us apart from other platforms.
-            </p>
-          </div>
-          
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            {[
-              {
-                userName: "Alex K.",
-                role: "Day Trader",
-                quote: "The AI-powered sentiment analysis has been a game-changer for my day trading strategy. I&apos;m catching market shifts before they happen.",
-                avatarUrl: "/avatar1.jpg"
-              },
-              {
-                userName: "Sarah M.",
-                role: "Swing Trader",
-                quote: "As a swing trader, the technical analysis tools have helped me identify optimal entry and exit points with much greater precision.",
-                avatarUrl: "/avatar2.jpg"
-              },
-              {
-                userName: "Michael T.",
-                role: "Long-term Investor",
-                quote: "The portfolio management features help me maintain the perfect balance in my crypto investments. The diversification recommendations are spot on.",
-                avatarUrl: "/avatar3.jpg"
-              }
-            ].map((testimonial, index) => (
-              <div key={index} className="bg-gray-800 rounded-xl p-8 border border-gray-700">
-                <div className="flex items-center mb-6">
-                  <div className="w-12 h-12 rounded-full bg-gray-700 flex-shrink-0 mr-4 overflow-hidden">
-                    <div className="w-full h-full bg-gradient-to-br from-emerald-400 to-blue-500 flex items-center justify-center text-white font-bold text-lg">
-                      {testimonial.userName.charAt(0)}
-                    </div>
-                  </div>
-                  <div>
-                    <h3 className="text-white font-semibold">{testimonial.userName}</h3>
-                    <p className="text-gray-400 text-sm">{testimonial.role}</p>
+          {/* ── Finance Panel (1/3) ── */}
+          <div className="flex flex-col gap-4">
+
+            {/* Gelir/Gider Özeti */}
+            <div className="bg-gray-900 rounded-xl border border-gray-800 p-4">
+              <h3 className="text-sm font-semibold text-gray-400 mb-3">Gelir / Gider Özeti</h3>
+              <div className="grid grid-cols-3 gap-2 mb-4">
+                <div className="bg-emerald-500/10 rounded-lg p-3 text-center border border-emerald-500/20">
+                  <div className="text-xs text-emerald-400 mb-1">Gelir</div>
+                  <div className="text-sm font-bold text-emerald-400">₺{fmt(totalIncome)}</div>
+                </div>
+                <div className="bg-red-500/10 rounded-lg p-3 text-center border border-red-500/20">
+                  <div className="text-xs text-red-400 mb-1">Gider</div>
+                  <div className="text-sm font-bold text-red-400">₺{fmt(totalExpense)}</div>
+                </div>
+                <div className={`rounded-lg p-3 text-center border ${netBalance >= 0 ? 'bg-blue-500/10 border-blue-500/20' : 'bg-red-500/10 border-red-500/20'}`}>
+                  <div className={`text-xs mb-1 ${netBalance >= 0 ? 'text-blue-400' : 'text-red-400'}`}>Net</div>
+                  <div className={`text-sm font-bold ${netBalance >= 0 ? 'text-blue-400' : 'text-red-400'}`}>
+                    ₺{fmt(netBalance)}
                   </div>
                 </div>
-                <p className="text-gray-300 italic">&quot;{testimonial.quote}&quot;</p>
               </div>
-            ))}
-          </div>
-        </div>
-      </section>
 
-      {/* CTA Section */}
-      <section className="py-20 px-4 bg-gradient-to-r from-emerald-900 to-blue-900 animate-on-scroll">
-        <div className="max-w-5xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-6 text-white">Ready to Transform Your Trading Experience?</h2>
-          <p className="text-xl text-white/80 mb-10 max-w-3xl mx-auto">
-            Experience the platform that combines technical and fundamental analysis with AI-powered news scoring.
-          </p>
-          <div className="flex flex-col sm:flex-row justify-center space-y-4 sm:space-y-0 sm:space-x-6">
-            <Link 
-              href="/signup" 
-              className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-md font-medium text-lg shadow-lg transition-all"
-            >
-              Start Free Trial
-            </Link>
-            <Link 
-              href="/demo" 
-              className="bg-gray-800/50 hover:bg-gray-800 text-white border border-white/20 px-8 py-4 rounded-md font-medium text-lg flex items-center justify-center space-x-2 transition-all"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor" className="h-5 w-5">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Request Demo</span>
-            </Link>
-          </div>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-black py-12 border-t border-gray-800">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="mb-6 md:mb-0">
-              <Link href="/" className="text-2xl font-bold text-white">
-                <span className="text-emerald-400">COGNI</span>TRADE
-              </Link>
-              <p className="text-gray-500 mt-2">Trade smarter, not harder.</p>
+              {/* Progress bars */}
+              <div className="space-y-2.5">
+                <div>
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Gelir</span><span>₺{fmt(totalIncome)}</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div className="h-full bg-emerald-500 rounded-full w-full" />
+                  </div>
+                </div>
+                <div>
+                  <div className="flex justify-between text-xs text-gray-500 mb-1">
+                    <span>Gider</span><span>₺{fmt(totalExpense)}</span>
+                  </div>
+                  <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                    <div
+                      className="h-full bg-red-500 rounded-full transition-all"
+                      style={{ width: `${Math.min((totalExpense / totalIncome) * 100, 100)}%` }}
+                    />
+                  </div>
+                </div>
+                <div className="text-xs text-gray-600 text-right">
+                  Tasarruf oranı: %{fmt(((totalIncome - totalExpense) / totalIncome) * 100, 1)}
+                </div>
+              </div>
             </div>
-            <div className="flex space-x-6">
-              <Link href="/privacy" className="text-gray-400 hover:text-white">
-                Privacy
-              </Link>
-              <Link href="/terms" className="text-gray-400 hover:text-white">
-                Terms
-              </Link>
-              <Link href="/contact" className="text-gray-400 hover:text-white">
-                Contact
-              </Link>
+
+            {/* Son İşlemler */}
+            <div className="bg-gray-900 rounded-xl border border-gray-800 flex-1 flex flex-col min-h-0">
+              <div className="flex items-center justify-between p-4 border-b border-gray-800 shrink-0">
+                <h3 className="text-sm font-semibold text-gray-400">Son İşlemler</h3>
+                <button
+                  onClick={() => setShowForm(!showForm)}
+                  className="text-xs bg-emerald-600 hover:bg-emerald-700 text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
+                >
+                  + Ekle
+                </button>
+              </div>
+
+              {/* Add form */}
+              {showForm && (
+                <div className="p-4 border-b border-gray-800 bg-gray-800/50 shrink-0">
+                  <div className="grid grid-cols-2 gap-2 mb-2">
+                    <select
+                      value={form.type}
+                      onChange={e => setForm(prev => ({
+                        ...prev,
+                        type: e.target.value as TransactionType,
+                        category: e.target.value === 'gelir' ? 'Maaş' : 'Market',
+                      }))}
+                      className="bg-gray-700 text-white text-xs rounded-lg px-2 py-2 border border-gray-600 outline-none"
+                    >
+                      <option value="gelir">Gelir</option>
+                      <option value="gider">Gider</option>
+                    </select>
+                    <select
+                      value={form.category}
+                      onChange={e => setForm(prev => ({ ...prev, category: e.target.value }))}
+                      className="bg-gray-700 text-white text-xs rounded-lg px-2 py-2 border border-gray-600 outline-none"
+                    >
+                      {(form.type === 'gelir' ? INCOME_CATEGORIES : EXPENSE_CATEGORIES).map(c => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <input
+                    type="number"
+                    placeholder="Tutar (₺)"
+                    value={form.amount}
+                    onChange={e => setForm(prev => ({ ...prev, amount: e.target.value }))}
+                    className="w-full bg-gray-700 text-white text-xs rounded-lg px-3 py-2 mb-2 border border-gray-600 placeholder-gray-500 outline-none"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Açıklama"
+                    value={form.description}
+                    onChange={e => setForm(prev => ({ ...prev, description: e.target.value }))}
+                    className="w-full bg-gray-700 text-white text-xs rounded-lg px-3 py-2 mb-2 border border-gray-600 placeholder-gray-500 outline-none"
+                  />
+                  <input
+                    type="date"
+                    value={form.date}
+                    onChange={e => setForm(prev => ({ ...prev, date: e.target.value }))}
+                    className="w-full bg-gray-700 text-white text-xs rounded-lg px-3 py-2 mb-2 border border-gray-600 outline-none"
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={addTransaction}
+                      className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-xs py-2 rounded-lg transition-colors font-medium"
+                    >
+                      Kaydet
+                    </button>
+                    <button
+                      onClick={() => setShowForm(false)}
+                      className="flex-1 bg-gray-700 hover:bg-gray-600 text-white text-xs py-2 rounded-lg transition-colors"
+                    >
+                      İptal
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Transaction list */}
+              <div className="overflow-y-auto flex-1" style={{ maxHeight: '340px' }}>
+                {transactions.map(t => (
+                  <div
+                    key={t.id}
+                    className="flex items-center justify-between px-4 py-3 border-b border-gray-800/50 hover:bg-gray-800/30 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm font-bold ${
+                        t.type === 'gelir' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-red-500/20 text-red-400'
+                      }`}>
+                        {t.type === 'gelir' ? '↑' : '↓'}
+                      </div>
+                      <div>
+                        <div className="text-xs font-medium text-white">{t.description}</div>
+                        <div className="text-xs text-gray-500">{t.category} · {t.date}</div>
+                      </div>
+                    </div>
+                    <span className={`text-sm font-semibold ${t.type === 'gelir' ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {t.type === 'gelir' ? '+' : '-'}₺{fmt(t.amount)}
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
-          <div className="mt-8 pt-8 border-t border-gray-800 text-center text-gray-500">
-            <p>&copy; {new Date().getFullYear()} CogniTrade. All rights reserved.</p>
-          </div>
         </div>
-      </footer>
 
-      {/* Style for animations */}
-      <style jsx global>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 0.3; }
-          50% { opacity: 0.8; }
-        }
-        
-        .grid-background {
-          background-size: 50px 50px;
-          background-image:
-            linear-gradient(to right, #333 1px, transparent 1px),
-            linear-gradient(to bottom, #333 1px, transparent 1px);
-        }
-
-        html {
-          scroll-behavior: smooth;
-        }
-
-        .animate-in {
-          animation: fadeIn 0.5s ease-in-out forwards;
-        }
-
-        @keyframes fadeIn {
-          from { opacity: 0; transform: translateY(20px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-
-        @keyframes textSlide {
-          from { opacity: 0; transform: translateX(-20px); }
-          to { opacity: 1; transform: translateX(0); }
-        }
-
-        .animate-text-slide {
-          opacity: 0;
-          animation: textSlide 0.8s cubic-bezier(0.25, 0.46, 0.45, 0.94) forwards;
-        }
-
-        .animate-on-scroll {
-          opacity: 0;
-          transform: translateY(30px);
-          transition: opacity 0.8s ease-out, transform 0.8s ease-out;
-        }
-
-        section {
-          opacity: 0;
-          transition: opacity 0.6s ease-in-out, transform 0.6s ease-in-out;
-        }
-
-        section.in-view {
-          opacity: 1;
-          transform: translateY(0);
-        }
-
-        section.scroll-down {
-          animation: scrollDown 0.6s ease-out forwards;
-        }
-
-        section.scroll-up {
-          animation: scrollUp 0.6s ease-out forwards;
-        }
-
-        @keyframes scrollDown {
-          from { transform: translateY(-10px); }
-          to { transform: translateY(0); }
-        }
-
-        @keyframes scrollUp {
-          from { transform: translateY(10px); }
-          to { transform: translateY(0); }
-        }
-
-        .parallax {
-          will-change: transform;
-          transition: transform 0.2s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .parallax {
-            transition: none;
-          }
-          section {
-            transition: opacity 0.1s linear;
-          }
-          .animate-text-slide {
-            opacity: 1;
-            animation: none;
-          }
-        }
-      `}</style>
-    </main>
-  );
+        {/* Footer */}
+        <div className="mt-4 text-center text-gray-700 text-xs">
+          CogniTrade © 2026 · Veriler demo amaçlıdır, gerçek yatırım tavsiyesi değildir.
+        </div>
+      </div>
+    </div>
+  )
 }
